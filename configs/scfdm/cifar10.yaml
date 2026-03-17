@@ -1,0 +1,25 @@
+defaults:
+  - /defaults.yaml
+
+experiment:
+  run_name: scfdm_cifar10
+  tags: [scfdm, cifar10]
+
+dataset:
+  name: cifar10
+  split: train
+  download: true
+  batch_size: 512
+  subset_size: null  # Use full dataset for optimal denoiser index
+
+model:
+  name: scfdm
+  params:
+    temperature: 1.0  # Temperature for softmax weighting
+    num_neighbors: 200  # Number of nearest neighbors to use for search
+    num_noise: 10 # Number of noise samples for smoothing the optimal denoiser
+    smoothing_std: 0.1  # Standard deviation for smoothing the optimal denoiser
+
+metrics:
+  baseline_path: "data/models/baseline_unet/cifar10/ckpt_epoch_200.pt"
+
