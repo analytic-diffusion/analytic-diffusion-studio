@@ -47,6 +47,8 @@ dependencies = [
     "diffusers",
     "omegaconf",
     "faiss-cpu",
+    "ipykernel>=6.31.0",
+    "matplotlib>=3.9.4",
 ]
 
 [project.optional-dependencies]

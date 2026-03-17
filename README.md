@@ -51,6 +51,7 @@ If you encounter any bugs, inconsistent behavior, or have suggestions how to imp
 |--------|-------------|-------|
 | `pca_locality` | Analytical denoiser capturing locality from data statistics | [![arXiv](https://img.shields.io/badge/arXiv-2509.09672-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2509.09672) |
 | `optimal` | Bayes-optimal estimator | — |
+| `scfdm` | Smoothed Bayes-optimal estimator | [![arXiv](https://img.shields.io/badge/arXiv-2310.12395-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2310.12395) |
 | `wiener` | Wiener filter denoiser | — |
 | `nearest_dataset` | Nearest neighbor retrieval baseline | — |
 
