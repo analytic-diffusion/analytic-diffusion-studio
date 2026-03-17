@@ -1,36 +1,35 @@
-<p align="center">
-  This is the official implementation of the paper
-</p>
-
 <div id="user-content-toc" display="inline">
   <ul align="center" style="list-style: none;">
     <summary>
-      <h1>Locality in Image Diffusion Models Emerges from Data Statistics</h1>
+      <h1>Analytic Diffusion Studio</h1>
     </summary>
   </ul>
 
 <p align="center">
-  <a href="https://arxiv.org/abs/2509.09672">
-    <img src="https://img.shields.io/badge/arXiv-2509.09672-b31b1b.svg?logo=arXiv">
-  </a>
-  <a href="https://locality.lukoianov.com">
-    <img src="https://img.shields.io/badge/Project%20Page-Website-b78601.svg">
-  </a>
+  <i>A Unified Framework for Training-Free Diffusion Models</i>
 </p>
 
 <p align="center">
-    <a class="active text-decoration-none" href="https://lukoianov.com">Artem Lukoianov</a><sup> 1</sup>,  &nbsp;
-    <a class="active text-decoration-none" href="https://chenyang.co">Chenyang Yuan</a><sup> 2</sup>, &nbsp;
-    <a class="active text-decoration-none" href="https://people.csail.mit.edu/jsolomon/">Justin Solomon</a><sup> 1</sup>, &nbsp;
-    <a class="active text-decoration-none" href="https://www.vincentsitzmann.com">Vincent Sitzmann</a><sup> 1</sup>
-</p>
-<p align="center">
-  <span class="author-block"><sup>1 </sup>Massachusetts Institute of Technology,</span>&nbsp;
-  <span class="author-block"><sup>2 </sup>Toyota Research Institute</span>
+  <a href="https://github.com/analytic-diffusion/analytic-diffusion-studio/stargazers">
+    <img src="https://img.shields.io/github/stars/analytic-diffusion/analytic-diffusion-studio.svg?style=social&label=Star">
+  </a>
+  &nbsp;
+  <a href="https://github.com/analytic-diffusion/analytic-diffusion-studio/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg">
+  </a>
+  &nbsp;
+  <img src="https://img.shields.io/badge/Python-3.9%2B-blue.svg">
 </p>
 
 <p align="center">
-  For any questions please shoot an email to <a href="mailto:arteml@mit.edu">arteml@mit.edu</a>
+  Analytic Diffusion Studio provides a modular, extensible codebase for training-free analytical diffusion models.
+</p>
+
+<p align="center">
+    <a href="https://lukoianov.com">Artem Lukoianov</a>, &nbsp;
+    <a href="https://chenyang.co">Chenyang Yuan</a>, &nbsp;
+    <a href="https://cscarv.github.io/">Christopher Scarvelis</a>, &nbsp;
+    <a href="https://scholar.google.com/citations?user=H-yl_JMAAAAJ&hl=en">Mason Kamb</a>
 </p>
 
 <p align="center">
@@ -38,29 +37,34 @@
 </p>
 
 > [NOTE:]
-> 🐛 **Help us improve!** We've noticed inconsistent generation on MacOS -- check [current issues](https://github.com/ottogin/locality-in-diffusion-models/issues). If you encounter any bugs, inconsistent behavior, or have suggestions, please [open an issue](https://github.com/ottogin/locality-in-diffusion-models/issues). Your feedback is valuable!
+If you encounter any bugs, inconsistent behavior, or have suggestions how to improve this framework, please [open an issue](https://github.com/analytic-diffusion/analytic-diffusion-studio/issues) or better [make a pull request](https://github.com/analytic-diffusion/analytic-diffusion-studio/pulls). Your feedback is valuable!
 
 
-## Models
+## News
 
-The repository implements several analytical diffusion models:
+- **[2026/03/14]** Framework released as **Analytic Diffusion Studio** — a unified codebase for training-free diffusion methods.
 
-1. **`pca_locality`** (Main method): Our proposed analytical denoiser that captures locality from data statistics.
-2. **`optimal`**: The theoretically optimal denoiser (reproduces training images).
-3. **`wiener`**: Wiener filter-based denoiser.
-4. **`nearest_dataset`**: Baseline that retrieves the nearest dataset image at each step.
 
-## Datasets
+## Supported Methods
 
-Supported datasets:
-- `mnist`: MNIST handwritten digits
-- `fashion_mnist`: Fashion-MNIST
-- `cifar10`: CIFAR-10
-- `celeba_hq`: CelebA-HQ
-- `afhq`: AFHQv2
+| Method | Description | Paper |
+|--------|-------------|-------|
+| `pca_locality` | Analytical denoiser capturing locality from data statistics | [![arXiv](https://img.shields.io/badge/arXiv-2509.09672-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2509.09672) |
+| `optimal` | Bayes-optimal estimator | — |
+| `wiener` | Wiener filter denoiser | — |
+| `nearest_dataset` | Nearest neighbor retrieval baseline | — |
 
-Most datasets auto-download. 
-For `celeba_hq` and `afhq`, so please download them manually and place data in `data/datasets/`.
+
+## Supported Datasets
+
+| Dataset | Config key | Auto-download | Notes |
+|---------|-----------|---------------|-------|
+| MNIST | `mnist` | Yes | |
+| Fashion-MNIST | `fashion_mnist` | Yes | |
+| CIFAR-10 | `cifar10` | Yes | |
+| CelebA-HQ | `celeba_hq` | No | Download manually and place in `data/datasets/` |
+| AFHQv2 | `afhq` | No | Download manually and place in `data/datasets/` |
+
 
 ## Environment Setup
 
@@ -88,7 +92,7 @@ uv pip install -e .
 
 ### Download the baseline UNET weights and the data
 First we need to run this script to download the weights of the UNET models pre-trained for all of the baseline datasets.
-It 
+It
 You can skip this step, but then the metrics wont be available -- make sure to disable `baseline_path` in the config.
 
 ```bash
@@ -233,6 +237,26 @@ metrics:
 
 We welcome contributions to this repository! Here are some ways you can help:
 
+### Adding a New Method
+
+Adding a new analytical diffusion method is straightforward:
+
+1. **Subclass `BaseDenoiser`** in a new file under `src/local_diffusion/models/`:
+   ```python
+   from local_diffusion.models.base import BaseDenoiser
+   from local_diffusion.models import register_model
+
+   @register_model("your_method")
+   class YourDenoiser(BaseDenoiser):
+       def denoise(self, x_t, t, **kwargs):
+           # Your denoising logic here
+           ...
+   ```
+2. **Add the import** in `src/local_diffusion/models/__init__.py` so the decorator registers your model.
+3. **Add config files** in `configs/your_method/` for each dataset you support (inherit from `configs/defaults.yaml`).
+4. **Update the Supported Methods table** in this README and include an arXiv badge if applicable.
+5. **Submit a PR** with sample outputs demonstrating your method's results.
+
 ### Reporting Issues
 
 If you encounter bugs or have suggestions for improvements, please open an issue on GitHub. When reporting bugs, please include:
@@ -249,25 +273,16 @@ If you encounter bugs or have suggestions for improvements, please open an issue
 4. **Update documentation** if you add new features or change existing behavior
 5. **Submit a pull request** with a clear description of your changes
 
-### Adding New Models
-
-To add a new analytical diffusion model:
-
-1. Create a new file in `src/local_diffusion/models/` implementing the `BaseDenoiser` interface
-2. Register your model using the `@register_model("model_name")` decorator
-3. Add configuration files in `configs/model_name/` for each dataset
-4. Update this README to document your model
-
 
 ### Project Directory Structure
 
 The project follows a structured layout:
 
 ```
-locality-in-diffusion-models/
+analytic-diffusion-studio/
 ├── configs/              # Configuration files
 │   ├── defaults.yaml     # Base configuration with common defaults
-│   ├── pca_locality/     # Configs for the method proposed in our paper
+│   ├── pca_locality/     # Configs for the PCA locality method
 │   ├── optimal/          # Optimal denoiser baseline
 │   ├── wiener/           # Wiener filter baseline
 │   └── nearest_dataset/  # Nearest neighbor baseline
@@ -289,15 +304,15 @@ locality-in-diffusion-models/
 
 ## Citation
 
-If you find our project useful, please consider citing it:
+If you find this framework useful, please cite it:
 
 ```bibtex
-@inproceedings{lukoianovlocality,
-      title={Locality in Image Diffusion Models Emerges from Data Statistics},
-      author={Lukoianov, Artem and Yuan, Chenyang and Solomon, Justin and Sitzmann, Vincent},
-      booktitle={The Thirty-ninth Annual Conference on Neural Information Processing Systems}
-      year={2025},
-      primaryClass={cs.CV},
-      url={https://locality.lukoianov.com/}, 
+@misc{analytic-diffusion-studio,
+    title={Analytic Diffusion Studio: A Unified Framework for Training-Free Diffusion Models},
+    author={Kamb, Mason and Lukoianov, Artem and Scarvelis, Christopher and Yuan, Chenyang},
+    year={2025},
+    url={https://github.com/analytic-diffusion/analytic-diffusion-studio},
 }
 ```
+
+> If you use a specific method, please also cite the corresponding paper (linked in the Supported Methods table above).

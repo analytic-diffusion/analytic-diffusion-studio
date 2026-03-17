@@ -26,5 +26,6 @@ def create_model(name: str, **kwargs: Any) -> Any:
 # Ensure baseline models are registered by default.
 from . import nearest_dataset  # noqa: E402,F401
 from . import optimal  # noqa: E402,F401
+from . import scfdm  # noqa: E402,F401
 from . import wiener  # noqa: E402,F401
 from . import pca_locality  # noqa: E402,F401
