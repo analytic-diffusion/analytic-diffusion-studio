@@ -1,0 +1,18 @@
+defaults:
+  - /defaults.yaml
+
+experiment:
+  run_name: nearest_dataset_imagenet
+  tags: [baseline, nearest, imagenet]
+
+dataset:
+  name: imagenet
+  split: train
+  download: true
+  batch_size: 256
+  subset_size: null
+  resolution: 64
+
+model:
+  name: nearest_dataset
+  params: {}

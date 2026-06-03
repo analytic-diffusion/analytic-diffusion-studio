@@ -1,0 +1,22 @@
+defaults:
+  - /defaults.yaml
+
+experiment:
+  run_name: scfdm_ffhq
+  tags: [scfdm, ffhq]
+
+dataset:
+  name: ffhq
+  split: train
+  download: true
+  batch_size: 256
+  subset_size: null
+  resolution: 64
+
+model:
+  name: scfdm
+  params:
+    temperature: 1.0
+    num_neighbors: 200
+    num_noise: 10
+    smoothing_std: 0.1

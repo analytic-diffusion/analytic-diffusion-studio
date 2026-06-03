@@ -19,6 +19,9 @@ datasets=(
   cifar10
   fashion_mnist
   mnist
+  ffhq      # HuggingFace 64x64, ships a precomputed PCA
+  afhqv2    # HuggingFace 64x64, ships a precomputed PCA
+  # imagenet  # HuggingFace 64x64 (~16 GB download) -- uncomment to include
 )
 
 for baseline in "${baselines[@]}"; do

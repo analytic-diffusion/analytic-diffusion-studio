@@ -1,0 +1,19 @@
+defaults:
+  - /defaults.yaml
+
+experiment:
+  run_name: wiener_imagenet
+  tags: [baseline, wiener, imagenet]
+
+dataset:
+  name: imagenet
+  split: train
+  download: true
+  batch_size: 256
+  subset_size: null
+  resolution: 64
+
+model:
+  name: wiener
+  params:
+    use_precomputed_pca: true  # download published PCA instead of computing covariance

@@ -63,9 +63,16 @@ If you encounter any bugs, inconsistent behavior, or have suggestions how to imp
 |---------|-----------|---------------|-------|
 | MNIST | `mnist` | Yes | |
 | Fashion-MNIST | `fashion_mnist` | Yes | |
-| CIFAR-10 | `cifar10` | Yes | |
+| CIFAR-10 | `cifar10` | Yes | Precomputed PCA available (32×32) |
 | CelebA-HQ | `celeba_hq` | No | Download manually and place in `data/datasets/` |
 | AFHQv2 | `afhq` | No | Download manually and place in `data/datasets/` |
+| AFHQv2 (64×64) | `afhqv2` | Yes | From HuggingFace; precomputed PCA available |
+| FFHQ (64×64) | `ffhq` | Yes | From HuggingFace; precomputed PCA available |
+| ImageNet (64×64) | `imagenet` | Yes | From HuggingFace (~16 GB); precomputed PCA available |
+
+The `ffhq`, `imagenet` and `afhqv2` datasets, along with their precomputed PCAs, are
+hosted at [`binxu/image_datasets_PCAs`](https://huggingface.co/datasets/binxu/image_datasets_PCAs)
+and downloaded automatically on first use (`download: true`).
 
 
 ## Environment Setup
@@ -150,7 +157,7 @@ Run all baseline-dataset combinations using the provided script:
 
 This script iterates over:
 - **Baselines**: `pca_locality`, `optimal`, `wiener`, `nearest_dataset`
-- **Datasets**: `afhq`, `celeba_hq`, `cifar10`, `fashion_mnist`, `mnist`
+- **Datasets**: `afhq`, `celeba_hq`, `cifar10`, `fashion_mnist`, `mnist`, `ffhq`, `afhqv2` (and `imagenet`, commented out by default due to its size)
 
 It automatically skips missing config files and runs each experiment sequentially.
 
