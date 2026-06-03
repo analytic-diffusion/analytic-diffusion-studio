@@ -67,4 +67,16 @@ def hf_download(
 
     LOGGER.info("Downloading %s -> %s", url, dest)
     urllib.request.urlretrieve(url, dest)
+
+    # Some hosts answer auth/availability problems with a 200 HTML page instead of an
+    # error status; guard against silently saving that as a .zip/.pt (valid payloads --
+    # zip and torch.save archives -- begin with "PK", never "<").
+    with open(dest, "rb") as fh:
+        head = fh.read(64).lstrip()
+    if head[:1] == b"<":
+        dest.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"Download of {url} returned an HTML page, not a file "
+            f"(the repo may be private/gated or the file moved)."
+        )
     return dest

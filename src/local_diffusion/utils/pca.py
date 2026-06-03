@@ -55,6 +55,14 @@ PIXEL_SCALE = 2.0
 PIXEL_SHIFT = -1.0
 
 
+def default_wiener_path(dataset) -> Path:
+    """Canonical on-disk cache location for a dataset's Wiener SVD / precomputed PCA.
+
+    Shared by the ``wiener`` and ``pca_locality`` models so they reuse the same cache.
+    """
+    return Path("data/models/wiener") / f"{dataset.name}_{dataset.resolution}"
+
+
 def precomputed_pca_key(name: str, resolution: int) -> str:
     return f"{name.lower()}_{int(resolution)}"
 

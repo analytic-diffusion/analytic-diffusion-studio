@@ -193,11 +193,9 @@ class EDMUNet(BaseDenoiser):
 
         t = int(timestep.item()) if isinstance(timestep, torch.Tensor) else int(timestep)
         alpha_prod_t = self.scheduler.alphas_cumprod[t].to(latents.device)
-        sqrt_alpha = alpha_prod_t.sqrt()
+        sqrt_alpha = alpha_prod_t.clamp(min=self.eps).sqrt()
         sigma = ((1.0 - alpha_prod_t) / alpha_prod_t.clamp(min=self.eps)).sqrt()
 
-        x_edm = (latents / sqrt_alpha.clamp(min=self.eps)).to(torch.float32)
-        sigma_b = sigma.to(torch.float32).expand(latents.shape[0])
-
-        pred_x0 = self.net(x_edm, sigma_b, force_fp32=not self.use_fp16)
-        return pred_x0.to(latents.dtype)
+        # Map the DDPM latent to EDM's unit-scaled input, then reuse the exact denoiser.
+        x_edm = latents / sqrt_alpha
+        return self.denoise_sigma(x_edm, sigma)

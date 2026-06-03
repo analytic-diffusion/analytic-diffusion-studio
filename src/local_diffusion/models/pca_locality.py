@@ -12,7 +12,7 @@ from tqdm import tqdm
 from local_diffusion.data import DatasetBundle
 from local_diffusion.models import register_model
 from local_diffusion.models.base import BaseDenoiser
-from local_diffusion.utils import resolve_wiener_components
+from local_diffusion.utils import default_wiener_path, resolve_wiener_components
 
 LOGGER = logging.getLogger(__name__)
 
@@ -99,13 +99,9 @@ class PCALocalityDenoiser(BaseDenoiser):
         # Allow precomputed PCA download (when available) to skip covariance + SVD.
         self.use_precomputed_pca = bool(params.get("use_precomputed_pca", True))
 
-        # Share Wiener path logic with the Wiener model
+        # Share the Wiener cache path with the Wiener model.
         wiener_path = params.get("wiener_path", None)
-        if wiener_path is None:
-            default_root = Path("data/models/wiener")
-            self.wiener_path = default_root / f"{dataset.name}_{dataset.resolution}"
-        else:
-            self.wiener_path = Path(wiener_path)
+        self.wiener_path = Path(wiener_path) if wiener_path else default_wiener_path(dataset)
 
         self.dataset: Optional[DatasetBundle] = None
 

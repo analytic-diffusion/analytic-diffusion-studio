@@ -6,7 +6,7 @@ import torch
 
 from local_diffusion.data import DatasetBundle
 from local_diffusion.models.base import BaseDenoiser
-from local_diffusion.utils import resolve_wiener_components
+from local_diffusion.utils import default_wiener_path, resolve_wiener_components
 from local_diffusion.models import register_model
 
 
@@ -34,16 +34,11 @@ class DenoisingWiener(BaseDenoiser):
             **kwargs,
         )
         
-        self.wiener_path = params.get("wiener_path", None)
         # Allow precomputed PCA download (when available) to skip covariance + SVD.
         self.use_precomputed_pca = bool(params.get("use_precomputed_pca", True))
 
-        # If path not provided, default to data/models/wiener/<dataset>_<resolution>
-        if self.wiener_path is None:
-            default_root = Path("data/models/wiener")
-            self.wiener_path = default_root / f"{dataset.name}_{dataset.resolution}"
-        else:
-            self.wiener_path = Path(self.wiener_path)
+        wiener_path = params.get("wiener_path", None)
+        self.wiener_path = Path(wiener_path) if wiener_path else default_wiener_path(dataset)
 
     def train(self, dataset: DatasetBundle):  # type: ignore[override]
         """Load, download (precomputed PCA), or compute Wiener filter matrices."""

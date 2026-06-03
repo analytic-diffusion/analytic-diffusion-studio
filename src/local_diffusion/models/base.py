@@ -330,6 +330,11 @@ class BaseDenoiser(torch.nn.Module):
         device = self.device
         dtype = torch.float64
         num_steps = self.num_steps
+        if num_steps < 2:
+            raise ValueError(
+                "The Heun sampler needs num_inference_steps >= 2 "
+                f"(got {num_steps}); use method='ddim' for a single step."
+            )
 
         # A model may restrict the usable sigma range (e.g. a network's sigma_min/sigma_max).
         sigma_min = max(float(sigma_min), float(getattr(self, "sampler_sigma_min", sigma_min)))

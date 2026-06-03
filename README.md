@@ -245,9 +245,12 @@ rebuild that figure anytime:
 uv run make_comparison_montage.py afhqv2     # -> data/runs/comparison_afhqv2/montage.png
 ```
 
-The empirical/`optimal` denoiser is capped with `subset_size` for tractable runtime; only
-`edm_unet` evaluates at the exact σ, while `wiener`/`optimal` use the default VP bridge
-(σ → nearest DDPM timestep).
+The empirical/`optimal` denoiser is capped with `subset_size` for tractable runtime. Note
+that only `edm_unet` evaluates at the exact σ; `wiener`/`optimal` use the default VP bridge
+(σ → nearest DDPM timestep), whose representable σ floor is ≈0.01 on the linear schedule,
+so the final couple of low-noise Heun steps for those models are approximate. (A
+continuous-σ `denoise_sigma` for the analytic models — both are closed-form in σ — would
+remove this; it's a planned follow-up.)
 
 ### Notebook
 
