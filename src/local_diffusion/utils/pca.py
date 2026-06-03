@@ -30,6 +30,7 @@ from typing import Optional, Tuple
 
 import torch
 
+from .hf_download import hf_download
 from .wiener import compute_wiener_filter, load_wiener_filter, save_wiener_filter
 
 LOGGER = logging.getLogger(__name__)
@@ -113,7 +114,8 @@ def download_precomputed_pca(
     device : torch.device, optional
         Device on which to place the converted tensors before saving.
     cache_dir : str, optional
-        HuggingFace download cache directory.
+        Directory to download the raw PCA file into (reused on later calls). Defaults
+        to the huggingface_hub cache, or a local cache when falling back to urllib.
 
     Returns
     -------
@@ -125,14 +127,6 @@ def download_precomputed_pca(
     if filename is None:
         return False
 
-    try:
-        from huggingface_hub import hf_hub_download
-    except ImportError as exc:  # pragma: no cover - dependency guard
-        raise ImportError(
-            "huggingface_hub is required to download precomputed PCAs. "
-            "Install it with `uv pip install huggingface_hub`."
-        ) from exc
-
     LOGGER.info(
         "Downloading precomputed PCA '%s' for %s@%d from %s...",
         filename,
@@ -140,11 +134,8 @@ def download_precomputed_pca(
         resolution,
         PCA_HF_REPO,
     )
-    local_path = hf_hub_download(
-        repo_id=PCA_HF_REPO,
-        filename=filename,
-        repo_type="dataset",
-        cache_dir=cache_dir,
+    local_path = hf_download(
+        PCA_HF_REPO, filename, repo_type="dataset", dest_dir=cache_dir
     )
 
     pca = torch.load(local_path, map_location="cpu", weights_only=True)

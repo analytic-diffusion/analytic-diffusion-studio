@@ -25,6 +25,7 @@ from torch.utils.data import Dataset
 from PIL import Image
 
 from local_diffusion.configuration import DatasetConfig
+from local_diffusion.utils.hf_download import hf_download
 
 from . import utils
 from .datasets import DatasetFactoryOutput, register_dataset
@@ -95,17 +96,12 @@ def _resolve_zip_path(cfg: DatasetConfig, zip_filename: str) -> Path:
             f"https://huggingface.co/datasets/{HF_REPO}."
         )
 
-    try:
-        from huggingface_hub import hf_hub_download
-    except ImportError as exc:  # pragma: no cover - dependency guard
-        raise ImportError(
-            "huggingface_hub is required to download HuggingFace image datasets. "
-            "Install it with `uv pip install huggingface_hub`."
-        ) from exc
-
     LOGGER.info("Downloading %s from %s...", zip_filename, HF_REPO)
-    cached = hf_hub_download(repo_id=HF_REPO, filename=zip_filename, repo_type="dataset")
-    return Path(cached)
+    # Downloads into cfg.root (reused on later runs); falls back to urllib if
+    # huggingface_hub is unavailable or fails.
+    return hf_download(
+        HF_REPO, zip_filename, repo_type="dataset", dest_dir=Path(cfg.root)
+    )
 
 
 def _build_edm_zip_dataset(
