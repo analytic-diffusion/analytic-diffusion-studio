@@ -28,4 +28,7 @@ for m in "${models[@]}"; do
   echo
 done
 
-echo "Done. Results under data/runs/comparison_${dataset}/"
+# Stitch the per-model grids into one labeled side-by-side montage.
+uv run make_comparison_montage.py "$dataset" || echo "Montage step skipped." >&2
+
+echo "Done. Results under data/runs/comparison_${dataset}/ (see montage.png)"

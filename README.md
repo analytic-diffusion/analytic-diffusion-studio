@@ -237,9 +237,17 @@ dataset with:
 ./run_comparison.sh cifar10 experiment.device=cpu sampling.num_samples=4
 ```
 
-Results land under `data/runs/comparison_<dataset>/`. The empirical/`optimal` denoiser is
-capped with `subset_size` for tractable runtime; only `edm_unet` evaluates at the exact
-σ, while `wiener`/`optimal` use the default VP bridge (σ → nearest DDPM timestep).
+Results land under `data/runs/comparison_<dataset>/`, and `run_comparison.sh` finishes by
+stitching the per-model grids into a labeled side-by-side `montage.png` there. You can
+rebuild that figure anytime:
+
+```bash
+uv run make_comparison_montage.py afhqv2     # -> data/runs/comparison_afhqv2/montage.png
+```
+
+The empirical/`optimal` denoiser is capped with `subset_size` for tractable runtime; only
+`edm_unet` evaluates at the exact σ, while `wiener`/`optimal` use the default VP bridge
+(σ → nearest DDPM timestep).
 
 ### Notebook
 
