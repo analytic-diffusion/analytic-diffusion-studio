@@ -101,6 +101,30 @@ You can skip this step, but then the metrics wont be available -- make sure to d
 uv run download_baseline_weights.py
 ```
 
+### Precomputed PCA / Wiener filters
+
+The `wiener` and `pca_locality` models are built from the dataset covariance and its
+eigendecomposition (PCA). Computing this from scratch is expensive at higher resolutions
+— at 64×64×3 the covariance matrix is 12288×12288 (~600 MB) — so precomputed PCAs are
+published at [`binxu/image_datasets_PCAs`](https://huggingface.co/datasets/binxu/image_datasets_PCAs).
+
+When you run either model, it resolves its filter in this order:
+
+1. Load cached SVD components from `data/models/wiener/<dataset>_<resolution>/`.
+2. Otherwise, if a precomputed PCA exists for that dataset + resolution, download and
+   convert it (this is the default — the published PCAs cover `cifar10` @ 32 and
+   `afhqv2` / `ffhq` / `imagenet` @ 64).
+3. Otherwise, compute the covariance from the dataloader and SVD it.
+
+The conversion rescales the published PCA (computed in `[0, 1]`) into the framework's
+`[-1, 1]` pixel range. To force a local recompute instead of downloading, set
+`model.params.use_precomputed_pca=false`. You can also fetch one directly:
+
+```python
+from local_diffusion.utils import download_precomputed_pca
+download_precomputed_pca("ffhq", 64, "data/models/wiener/ffhq_64")
+```
+
 ## Running Experiments
 
 ### Single Experiment

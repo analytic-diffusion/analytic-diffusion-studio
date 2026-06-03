@@ -6,7 +6,7 @@ import torch
 
 from local_diffusion.data import DatasetBundle
 from local_diffusion.models.base import BaseDenoiser
-from local_diffusion.utils import compute_wiener_filter, load_wiener_filter, save_wiener_filter
+from local_diffusion.utils import resolve_wiener_components
 from local_diffusion.models import register_model
 
 
@@ -35,7 +35,9 @@ class DenoisingWiener(BaseDenoiser):
         )
         
         self.wiener_path = params.get("wiener_path", None)
-        
+        # Allow precomputed PCA download (when available) to skip covariance + SVD.
+        self.use_precomputed_pca = bool(params.get("use_precomputed_pca", True))
+
         # If path not provided, default to data/models/wiener/<dataset>_<resolution>
         if self.wiener_path is None:
             default_root = Path("data/models/wiener")
@@ -44,27 +46,16 @@ class DenoisingWiener(BaseDenoiser):
             self.wiener_path = Path(self.wiener_path)
 
     def train(self, dataset: DatasetBundle):  # type: ignore[override]
-        """Load or compute Wiener filter matrices."""
-        
-        try:
-            # Try to load existing Wiener filter SVD
-            U, LA, Vh, mean = load_wiener_filter(self.wiener_path, device=self.device)
-        except FileNotFoundError:
-            # Compute and save new Wiener filter
-            LOGGER.info("Wiener filter not found. Computing from dataset...")
-            S, mean = compute_wiener_filter(
-                dataloader=dataset.dataloader,
-                device=self.device,
-                resolution=self.resolution,
-                n_channels=self.n_channels,
-            )
-            
-            # Perform SVD decomposition
-            U, LA, Vh = torch.linalg.svd(S)
-            
-            save_wiener_filter(U, LA, Vh, mean, self.wiener_path)
-            LOGGER.info("Computed and saved Wiener filter to %s", self.wiener_path)
-        
+        """Load, download (precomputed PCA), or compute Wiener filter matrices."""
+
+        U, LA, Vh, mean = resolve_wiener_components(
+            self.wiener_path,
+            dataset,
+            device=self.device,
+            n_channels=self.n_channels,
+            use_precomputed_pca=self.use_precomputed_pca,
+        )
+
         self.register_buffer("U", U)
         self.register_buffer("LA", LA)
         self.register_buffer("Vh", Vh)
