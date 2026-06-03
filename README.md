@@ -29,7 +29,8 @@
     <a href="https://lukoianov.com">Artem Lukoianov</a>, &nbsp;
     <a href="https://chenyang.co">Chenyang Yuan</a>, &nbsp;
     <a href="https://cscarv.github.io/">Christopher Scarvelis</a>, &nbsp;
-    <a href="https://scholar.google.com/citations?user=H-yl_JMAAAAJ&hl=en">Mason Kamb</a>
+    <a href="https://scholar.google.com/citations?user=H-yl_JMAAAAJ&hl=en">Mason Kamb</a>, &nbsp;
+    <a href="https://animadversio.github.io/">Binxu Wang</a>
 </p>
 
 <p align="center">
@@ -310,7 +311,7 @@ If you find this framework useful, please cite it:
 ```bibtex
 @misc{analytic-diffusion-studio,
     title={Analytic Diffusion Studio: A Unified Framework for Training-Free Diffusion Models},
-    author={Kamb, Mason and Lukoianov, Artem and Scarvelis, Christopher and Yuan, Chenyang},
+    author={Kamb, Mason and Lukoianov, Artem and Scarvelis, Christopher and Yuan, Chenyang and Wang, Binxu},
     year={2025},
     url={https://github.com/analytic-diffusion/analytic-diffusion-studio},
 }
