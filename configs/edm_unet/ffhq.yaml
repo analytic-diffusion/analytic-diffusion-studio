@@ -1,0 +1,27 @@
+defaults:
+  - /defaults.yaml
+
+experiment:
+  run_name: edm_unet_ffhq
+  tags: [edm, unet, ffhq]
+
+dataset:
+  name: ffhq
+  split: train
+  download: true
+  batch_size: 256
+  subset_size: null
+  resolution: 64
+
+sampling:
+  num_samples: 16
+  batch_size: 16
+  num_inference_steps: 40
+
+model:
+  name: edm_unet
+  params:
+    use_fp16: false
+    # Checkpoint is auto-downloaded from the NVIDIA EDM CDN by dataset name.
+    # Override with: checkpoint_path (local .pkl/.pt), checkpoint_url, or
+    # hf_repo + hf_filename (a converted .pt re-hosted on HuggingFace).

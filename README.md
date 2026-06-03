@@ -55,6 +55,7 @@ If you encounter any bugs, inconsistent behavior, or have suggestions how to imp
 | `scfdm` | Smoothed Bayes-optimal estimator | [![arXiv](https://img.shields.io/badge/arXiv-2310.12395-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2310.12395) |
 | `wiener` | Wiener filter denoiser | [![arXiv](https://img.shields.io/badge/arXiv-2412.09726-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2412.09726) |
 | `nearest_dataset` | Nearest neighbor retrieval baseline | — |
+| `edm_unet` | Pretrained EDM UNet (Karras et al.) — learned baseline | [![arXiv](https://img.shields.io/badge/arXiv-2206.00364-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2206.00364) |
 
 
 ## Supported Datasets
@@ -130,6 +131,40 @@ The conversion rescales the published PCA (computed in `[0, 1]`) into the framew
 ```python
 from local_diffusion.utils import download_precomputed_pca
 download_precomputed_pca("ffhq", 64, "data/models/wiener/ffhq_64")
+```
+
+### EDM pretrained UNets (`edm_unet`)
+
+The `edm_unet` model wraps NVLabs' pretrained [EDM](https://github.com/NVlabs/edm)
+networks (Karras et al. 2022) as a learned denoiser, so you can compare the analytical
+methods against a strong trained diffusion model on the same images.
+
+By default it downloads the official VP checkpoint from the NVIDIA EDM CDN based on the
+dataset name (`cifar10`, `ffhq`, `afhqv2`):
+
+```bash
+uv run generate.py --config configs/edm_unet/cifar10.yaml
+```
+
+**No `edm`/`dnnlib` install required.** A minimal EDM subset is vendored under
+`src/local_diffusion/external/edm/` (its own NVIDIA CC BY-NC-SA 4.0 license is kept in
+that directory), which is enough to unpickle the official checkpoints directly. The model
+bridges the repo's DDIM schedule to EDM's σ parameterization
+(`σ = sqrt((1−ᾱ)/ᾱ)`, `x_edm = x_t/sqrt(ᾱ)`), so the EDM net plugs straight into the
+sampling loop.
+
+Checkpoint source can be overridden via `model.params`:
+- `checkpoint_path` — a local `.pkl` (official) or `.pt` (converted);
+- `checkpoint_url` — a direct URL to an official `.pkl`;
+- `hf_repo` + `hf_filename` — a converted `.pt` re-hosted on HuggingFace.
+
+To produce a dependency-light, version-robust checkpoint (a plain
+`{init_kwargs, state_dict}` that loads without the EDM pickle layer), convert once:
+
+```bash
+uv run convert_edm_checkpoint.py \
+    https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl \
+    data/models/edm/edm-cifar10-32x32-uncond-vp.pt
 ```
 
 ## Running Experiments
