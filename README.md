@@ -167,6 +167,26 @@ uv run convert_edm_checkpoint.py \
     data/models/edm/edm-cifar10-32x32-uncond-vp.pt
 ```
 
+### Samplers (DDIM and EDM Heun)
+
+`sampling.method` selects the integrator:
+
+- `ddim` (default) — first-order DDIM over the DDPM schedule.
+- `heun` — the EDM (Karras et al. 2022) deterministic 2nd-order Heun sampler on the
+  ρ-spaced σ schedule (≈`2·num_steps − 1` denoiser calls). Optional stochastic churn is
+  available via `s_churn` / `s_min` / `s_max` / `s_noise` (Algorithm 2).
+
+```bash
+uv run generate.py --config configs/edm_unet/cifar10.yaml sampling.method=heun
+```
+
+The Heun sampler is σ-native: each model exposes a `denoise_sigma(x, σ)` denoiser.
+`edm_unet` uses the network's exact `D(x, σ)`; the analytical models fall back to the
+default VP bridge (σ → nearest DDPM timestep). The `edm_unet` configs default to `heun`,
+and our implementation reproduces NVLabs' reference `edm_sampler` to float precision. The
+relevant Heun knobs (defaults in parentheses): `sigma_min` (0.002), `sigma_max` (80),
+`rho` (7), `s_churn` (0).
+
 ## Running Experiments
 
 ### Single Experiment

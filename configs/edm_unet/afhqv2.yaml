@@ -14,6 +14,7 @@ dataset:
   resolution: 64
 
 sampling:
+  method: heun  # EDM 2nd-order Heun sampler
   num_samples: 16
   batch_size: 16
   num_inference_steps: 40
