@@ -1,0 +1,17 @@
+defaults:
+  - /defaults.yaml
+  - /comparison/_base_ffhq.yaml
+
+# softmax empirical Bayes score (subset-indexed)
+experiment:
+  run_name: cmp_ffhq_optimal
+  tags: [comparison, ffhq, optimal, heun]
+
+dataset:
+  subset_size: 8192  # cap the empirical index for tractable runtime
+
+model:
+  name: optimal
+  params:
+    temperature: 1.0
+    num_neighbors: 200

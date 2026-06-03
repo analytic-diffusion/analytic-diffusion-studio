@@ -216,6 +216,31 @@ This script iterates over:
 
 It automatically skips missing config files and runs each experiment sequentially.
 
+### Denoiser comparison (EDM vs Wiener vs empirical)
+
+`configs/comparison/` pits three denoisers against each other under an **identical** setup
+(same dataset, seed, and EDM Heun sampler) so their generations are directly comparable —
+the seeded sampler draws the same initial latents for all three:
+
+| Config | Denoiser | Role |
+|--------|----------|------|
+| `<dataset>_edm_unet.yaml` | `edm_unet` | pretrained EDM UNet (learned reference) |
+| `<dataset>_wiener.yaml` | `wiener` | Gaussian / Wiener analytical denoiser (precomputed PCA) |
+| `<dataset>_optimal.yaml` | `optimal` | softmax empirical Bayes score (subset-indexed) |
+
+Datasets: `afhqv2`, `ffhq` (both from HuggingFace), and `cifar10`. Run all three for a
+dataset with:
+
+```bash
+./run_comparison.sh afhqv2
+# or, for a quick CPU check on cached CIFAR-10:
+./run_comparison.sh cifar10 experiment.device=cpu sampling.num_samples=4
+```
+
+Results land under `data/runs/comparison_<dataset>/`. The empirical/`optimal` denoiser is
+capped with `subset_size` for tractable runtime; only `edm_unet` evaluates at the exact
+σ, while `wiener`/`optimal` use the default VP bridge (σ → nearest DDPM timestep).
+
 ### Notebook
 
 For quick experimentation, you can use the Jupyter notebook: `playground.ipynb`

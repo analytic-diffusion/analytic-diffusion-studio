@@ -1,0 +1,13 @@
+defaults:
+  - /defaults.yaml
+  - /comparison/_base_cifar10.yaml
+
+# pretrained EDM UNet (learned reference)
+experiment:
+  run_name: cmp_cifar10_edm_unet
+  tags: [comparison, cifar10, edm_unet, heun]
+
+model:
+  name: edm_unet
+  params:
+    use_fp16: false

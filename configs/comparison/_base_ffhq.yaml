@@ -1,0 +1,31 @@
+# Shared settings for the ffhq denoiser comparison (edm_unet vs wiener vs optimal).
+# Same dataset + seed + Heun schedule across all three so generations are directly
+# comparable (the seeded sampler draws identical initial latents).
+
+experiment:
+  name: comparison_ffhq        # all three runs share this parent run directory
+  seed: 42
+  append_timestamp: false      # stable run names so reruns overwrite, not accumulate
+  device: cuda                 # override with experiment.device=cpu/mps if needed
+
+dataset:
+  name: ffhq
+  split: train
+  download: true
+  batch_size: 256
+  resolution: 64
+  subset_size: null
+
+sampling:
+  method: heun                 # EDM 2nd-order Heun sampler
+  num_samples: 8
+  batch_size: 8
+  num_inference_steps: 18
+  sigma_min: 0.002
+  sigma_max: 80.0
+  rho: 7.0
+
+metrics:
+  baseline_path: null
+  wandb:
+    enabled: false             # runnable out of the box; enable if you use W&B
