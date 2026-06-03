@@ -67,6 +67,26 @@ class BaseDenoiser(torch.nn.Module):
         """
         raise NotImplementedError
 
+    @torch.no_grad()
+    def denoise_sigma(self, x: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor:
+        """Denoise an EDM-convention noisy input ``x = x0 + sigma * eps`` at level ``sigma``.
+
+        Returns the clean-image estimate ``x0_hat = D(x; sigma)``. This is the interface the
+        EDM Heun sampler uses. The default implementation bridges to the DDPM-timestep
+        :meth:`denoise` via the VP correspondence: with ``alpha_bar = 1/(1 + sigma**2)`` the
+        DDPM-scaled latent is ``x_t = sqrt(alpha_bar) * x`` at the nearest scheduler timestep.
+        Sub-classes with a native sigma denoiser (e.g. ``edm_unet``) should override this.
+        """
+        sigma_val = float(sigma)
+        if sigma_val <= 0.0:
+            return self.denoise(x, torch.tensor(0, device=x.device))
+
+        alpha_bar = 1.0 / (1.0 + sigma_val * sigma_val)
+        alphas_cumprod = self.scheduler.alphas_cumprod.to(x.device)
+        t = int(torch.argmin((alphas_cumprod - alpha_bar).abs()).item())
+        x_t = x * (alpha_bar ** 0.5)
+        return self.denoise(x_t, torch.tensor(t, device=x.device))
+
     def build_sample_output(
         self,
         images: torch.Tensor,
@@ -134,6 +154,8 @@ class BaseDenoiser(torch.nn.Module):
         batch_size: int,
         generator: Optional[torch.Generator] = None,
         return_intermediates: bool = False,
+        method: str = "ddim",
+        sampler_kwargs: Optional[Dict[str, Any]] = None,
     ) -> SamplingOutput:
         if num_samples <= 0:
             raise ValueError("num_samples must be positive")
@@ -148,6 +170,8 @@ class BaseDenoiser(torch.nn.Module):
                 batch_size=current_batch,
                 generator=generator,
                 return_intermediates=return_intermediates,
+                method=method,
+                sampler_kwargs=sampler_kwargs,
             )
             batches.append(batch_result)
             total_generated += current_batch
@@ -184,7 +208,46 @@ class BaseDenoiser(torch.nn.Module):
             timesteps=timesteps,
         )
 
+    # Default EDM Heun sampler settings (Karras et al. 2022). Sub-classes may narrow the
+    # sigma range by setting ``sampler_sigma_min`` / ``sampler_sigma_max`` (edm_unet does).
+    _HEUN_DEFAULTS: Dict[str, float] = {
+        "sigma_min": 0.002,
+        "sigma_max": 80.0,
+        "rho": 7.0,
+        "s_churn": 0.0,
+        "s_min": 0.0,
+        "s_max": float("inf"),
+        "s_noise": 1.0,
+    }
+
     def _sample_batch(
+        self,
+        *,
+        batch_size: int,
+        generator: Optional[torch.Generator],
+        return_intermediates: bool,
+        method: str = "ddim",
+        sampler_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> SamplingOutput:
+        if method == "heun":
+            params = dict(self._HEUN_DEFAULTS)
+            if sampler_kwargs:
+                params.update({k: v for k, v in sampler_kwargs.items() if k in params})
+            return self._sample_batch_heun(
+                batch_size=batch_size,
+                generator=generator,
+                return_intermediates=return_intermediates,
+                **params,
+            )
+        if method not in ("ddim", None):
+            raise ValueError(f"Unknown sampling method '{method}' (expected 'ddim' or 'heun')")
+        return self._sample_batch_ddim(
+            batch_size=batch_size,
+            generator=generator,
+            return_intermediates=return_intermediates,
+        )
+
+    def _sample_batch_ddim(
         self,
         *,
         batch_size: int,
@@ -241,4 +304,92 @@ class BaseDenoiser(torch.nn.Module):
             trajectory_xt=trajectory_xt if return_intermediates else None,
             trajectory_x0=trajectory_x0 if return_intermediates else None,
             timesteps=timesteps_list if return_intermediates else None
+        )
+
+    @torch.no_grad()
+    def _sample_batch_heun(
+        self,
+        *,
+        batch_size: int,
+        generator: Optional[torch.Generator],
+        return_intermediates: bool,
+        sigma_min: float,
+        sigma_max: float,
+        rho: float,
+        s_churn: float,
+        s_min: float,
+        s_max: float,
+        s_noise: float,
+    ) -> SamplingOutput:
+        """EDM (Karras et al. 2022) deterministic Heun sampler over the rho-spaced schedule.
+
+        Integrates the probability-flow ODE from ``sigma_max`` down to 0 with a 2nd-order Heun
+        corrector (~``2 * num_steps - 1`` denoiser calls). ``s_churn`` > 0 enables the optional
+        stochastic variant (Algorithm 2). Uses :meth:`denoise_sigma`, so it works for any model.
+        """
+        device = self.device
+        dtype = torch.float64
+        num_steps = self.num_steps
+
+        # A model may restrict the usable sigma range (e.g. a network's sigma_min/sigma_max).
+        sigma_min = max(float(sigma_min), float(getattr(self, "sampler_sigma_min", sigma_min)))
+        sigma_max = min(float(sigma_max), float(getattr(self, "sampler_sigma_max", sigma_max)))
+
+        # rho-spaced noise schedule from sigma_max down to sigma_min, with a final 0 appended.
+        step_indices = torch.arange(num_steps, dtype=dtype, device=device)
+        t_steps = (
+            sigma_max ** (1.0 / rho)
+            + step_indices / (num_steps - 1)
+            * (sigma_min ** (1.0 / rho) - sigma_max ** (1.0 / rho))
+        ) ** rho
+        t_steps = torch.cat([t_steps, torch.zeros_like(t_steps[:1])])
+
+        shape = (batch_size, self.n_channels, self.resolution, self.resolution)
+        latents = torch.randn(shape, generator=generator, device=device, dtype=dtype)
+        x_next = latents * t_steps[0]  # start at the top noise scale sigma_max
+
+        trajectory_xt: Optional[List[torch.Tensor]] = [] if return_intermediates else None
+        trajectory_x0: Optional[List[torch.Tensor]] = [] if return_intermediates else None
+        timesteps_list: Optional[List[int]] = [] if return_intermediates else None
+
+        gamma_cap = 2.0 ** 0.5 - 1.0
+        timesteps_iter = tqdm(range(num_steps), total=num_steps, desc="Sampling (Heun)", unit="step")
+        for i in timesteps_iter:
+            t_cur = t_steps[i]
+            t_next = t_steps[i + 1]
+            x_cur = x_next
+
+            # Optional stochastic churn: momentarily raise the noise level t_cur -> t_hat.
+            gamma = min(s_churn / num_steps, gamma_cap) if (s_min <= t_cur <= s_max) else 0.0
+            t_hat = t_cur + gamma * t_cur
+            if gamma > 0:
+                noise = torch.randn(shape, generator=generator, device=device, dtype=dtype)
+                x_hat = x_cur + (t_hat ** 2 - t_cur ** 2).clamp(min=0).sqrt() * s_noise * noise
+            else:
+                x_hat = x_cur
+
+            # Euler predictor: slope dx/dsigma = (x - D(x, sigma)) / sigma.
+            denoised = self.denoise_sigma(x_hat.to(torch.float32), t_hat).to(dtype)
+            d_cur = (x_hat - denoised) / t_hat
+            x_next = x_hat + (t_next - t_hat) * d_cur
+
+            # Heun corrector: re-evaluate at the predicted point and average (skip final step).
+            if i < num_steps - 1:
+                denoised_next = self.denoise_sigma(x_next.to(torch.float32), t_next).to(dtype)
+                d_prime = (x_next - denoised_next) / t_next
+                x_next = x_hat + (t_next - t_hat) * (0.5 * d_cur + 0.5 * d_prime)
+
+            if return_intermediates:
+                if trajectory_xt is not None:
+                    trajectory_xt.append(x_next.detach().float().cpu())
+                if trajectory_x0 is not None:
+                    trajectory_x0.append(denoised.detach().float().cpu())
+                if timesteps_list is not None:
+                    timesteps_list.append(i)
+
+        return SamplingOutput(
+            images=x_next.detach().float().cpu(),
+            trajectory_xt=trajectory_xt if return_intermediates else None,
+            trajectory_x0=trajectory_x0 if return_intermediates else None,
+            timesteps=timesteps_list if return_intermediates else None,
         )

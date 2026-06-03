@@ -375,11 +375,20 @@ def main(argv: Optional[List[str]] = None) -> None:
             or cfg.metrics.baseline_path is not None  # Need intermediates for comparison
         )
         
+        sampling_method = cfg.sampling.get("method", "ddim")
+        sampler_kwargs = {
+            key: cfg.sampling[key]
+            for key in ("sigma_min", "sigma_max", "rho", "s_churn", "s_min", "s_max", "s_noise")
+            if key in cfg.sampling
+        }
+        LOGGER.info("Sampling method: %s", sampling_method)
         result: SamplingOutput = model.sample(
             num_samples=cfg.sampling.num_samples,
             batch_size=cfg.sampling.batch_size,
             generator=generator,
             return_intermediates=return_intermediates,
+            method=sampling_method,
+            sampler_kwargs=sampler_kwargs,
         )
         end_time = time.perf_counter()
 

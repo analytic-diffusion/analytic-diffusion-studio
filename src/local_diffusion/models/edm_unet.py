@@ -95,6 +95,10 @@ class EDMUNet(BaseDenoiser):
         self.net = self._load_network(ckpt_path, params)
         self.net = self.net.to(self.device).eval().requires_grad_(False)
 
+        # Expose the network's supported sigma range to the Heun sampler.
+        self.sampler_sigma_min = float(getattr(self.net, "sigma_min", 0.0))
+        self.sampler_sigma_max = float(getattr(self.net, "sigma_max", float("inf")))
+
         # Warn (don't fail) on an obvious dataset/architecture mismatch.
         if getattr(self.net, "img_resolution", self.resolution) != self.resolution:
             LOGGER.warning(
@@ -166,6 +170,15 @@ class EDMUNet(BaseDenoiser):
     def train(self, dataset: DatasetBundle):  # type: ignore[override]
         # Pretrained network; nothing to fit.
         return self
+
+    @torch.no_grad()
+    def denoise_sigma(self, x: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor:
+        """Exact EDM denoiser ``D(x; sigma)`` (overrides the VP bridge for the Heun sampler)."""
+        sigma_b = torch.as_tensor(sigma, dtype=torch.float32, device=x.device)
+        if sigma_b.ndim == 0:
+            sigma_b = sigma_b.expand(x.shape[0])
+        pred_x0 = self.net(x.to(torch.float32), sigma_b, force_fp32=not self.use_fp16)
+        return pred_x0.to(x.dtype)
 
     @torch.no_grad()
     def denoise(

@@ -82,6 +82,17 @@ class SamplingConfig:
     batch_size: int = 8
     num_inference_steps: int = 10
 
+    # Sampler selection: "ddim" (default) or "heun" (EDM Karras 2nd-order).
+    method: str = "ddim"
+    # EDM Heun schedule/stochasticity knobs (used only when method == "heun").
+    sigma_min: float = 0.002
+    sigma_max: float = 80.0
+    rho: float = 7.0
+    s_churn: float = 0.0
+    s_min: float = 0.0
+    s_max: float = 1e8  # effectively +inf; large finite value keeps OmegaConf happy
+    s_noise: float = 1.0
+
 
 @dataclass
 class WandbConfig:
