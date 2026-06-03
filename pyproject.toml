@@ -53,8 +53,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = []
-test = []
+dev = ["pytest"]
+test = ["pytest"]
 
 [project.urls]
 "Homepage" = "https://locality.lukoianov.com/"
@@ -75,4 +75,4 @@ test = []
 
 # uv configuration - enables `uv run` to work without manual `uv pip install -e .`
 [tool.uv]
-dev-dependencies = []
+dev-dependencies = ["pytest"]

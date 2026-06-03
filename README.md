@@ -165,6 +165,15 @@ It automatically skips missing config files and runs each experiment sequentiall
 
 For quick experimentation, you can use the Jupyter notebook: `playground.ipynb`
 
+### Tests
+
+Hermetic unit tests (no network/downloads) cover the precomputed-PCA conversion and the
+EDM-format zip dataset loader:
+
+```bash
+uv run --extra test pytest
+```
+
 
 ## Configuration Files
 
