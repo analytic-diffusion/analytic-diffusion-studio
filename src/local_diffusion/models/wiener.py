@@ -57,23 +57,17 @@ class DenoisingWiener(BaseDenoiser):
         self.register_buffer("mean", mean.to(self.device))
         return self
 
-    def _get_Lt_Ht(self, timestep: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _shrink_factors(self, timestep: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Per-PCA-direction Wiener shrinkage and sqrt(alpha_bar) for a timestep."""
         if not all(hasattr(self, attr) for attr in ["U", "LA", "Vh", "mean"]):
             raise RuntimeError(
                 "Model not trained. Call model.train(dataset) before sampling."
             )
-        
-        alpha_prod_t = self.scheduler.alphas_cumprod[timestep]
+        alpha_prod_t = self.scheduler.alphas_cumprod[timestep].to(self.LA.device)
         beta_prod_t = 1 - alpha_prod_t
-
-        shrink_factors = alpha_prod_t * self.LA / (beta_prod_t + alpha_prod_t * self.LA)
-        LAshrink = torch.diag(shrink_factors)  # [n, n]
-        LLt = self.U @ LAshrink @ self.Vh  # [n, n]
-
-        I = torch.eye(LLt.shape[0], device=LLt.device)
-        Ht = I - LLt
-        Lt = LLt.clone() / torch.sqrt(alpha_prod_t)
-        return Lt, Ht
+        # s_k = alpha_bar * lambda_k / (beta_bar + alpha_bar * lambda_k)  in [0, 1]
+        shrink = alpha_prod_t * self.LA / (beta_prod_t + alpha_prod_t * self.LA)
+        return shrink, alpha_prod_t.sqrt()
 
     @torch.no_grad()
     def denoise(
@@ -83,26 +77,19 @@ class DenoisingWiener(BaseDenoiser):
         *,
         generator: Optional[torch.Generator] = None,
         **kwargs: Any,
-    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
+    ) -> torch.Tensor:
         del generator, kwargs
-        
-        if self.mean is None:
-            raise RuntimeError(
-                "Model not trained. Call model.train(dataset) before sampling."
-            )
 
         timestep_index = int(timestep.item()) if isinstance(timestep, torch.Tensor) else int(timestep)
-        Lt, Ht = self._get_Lt_Ht(timestep_index)
+        shrink, sqrt_alpha = self._shrink_factors(timestep_index)
 
-        # Flatten latents to [batch, n_pixels]
-        latents_flat = latents.flatten(start_dim=1)  # [batch, n_pixels]
-        
-        # Apply Wiener filter: Lt @ x_t + Ht @ mean
-        lx0_flat = (Lt @ latents_flat.T).T  # [n_pixels, n_pixels] @ [n_pixels, batch] -> [n_pixels, batch] -> [batch, n_pixels]
-        mean_term_flat = (Ht @ self.mean.unsqueeze(-1)).squeeze(-1)  # [n_pixels, n_pixels] @ [n_pixels, 1] -> [n_pixels]
-        
-        # Combine and reshape back to image dimensions
-        total_x0_flat = lx0_flat + mean_term_flat.unsqueeze(0)  # [batch, n_pixels]
-        total_x0 = total_x0_flat.view_as(latents)
+        # The Wiener estimate is  x0 = mean + U diag(s) U^T (x_t / sqrt(alpha_bar) - mean).
+        # Apply it directly in the PCA basis (project -> shrink -> reconstruct) instead of
+        # materializing the [n, n] filter: this is O(n * k) per step with no n x n matrix.
+        x = latents.flatten(start_dim=1)                 # [batch, n]
+        residual = x / sqrt_alpha - self.mean.unsqueeze(0)  # [batch, n]
+        coeff = residual @ self.U                          # [batch, k]  project onto eigenvectors
+        coeff = coeff * shrink.unsqueeze(0)                # shrink each direction
+        pred_x0 = self.mean.unsqueeze(0) + coeff @ self.Vh  # [batch, n]  reconstruct (Vh = U^T)
 
-        return total_x0
+        return pred_x0.view_as(latents)
