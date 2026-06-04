@@ -1,0 +1,13 @@
+defaults:
+  - /defaults.yaml
+  - /comparison/_base_ffhq.yaml
+
+# Gaussian / Wiener analytical denoiser (precomputed PCA)
+experiment:
+  run_name: cmp_ffhq_wiener
+  tags: [comparison, ffhq, wiener, heun]
+
+model:
+  name: wiener
+  params:
+    use_precomputed_pca: true

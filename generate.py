@@ -223,10 +223,13 @@ def _save_intermediates(dataset, result, run_paths):
         t_label = result.timesteps[i] if result.timesteps else i
         batch_size = xt.shape[0]
         
-        for j, img in enumerate(dataset.postprocess(xt)):
+        # x_t is the raw noisy latent (for sigma-based samplers like Heun it is scaled by
+        # the noise level, well outside [-1, 1]); per-image min-max normalization renders
+        # the structure instead of saturating.
+        for j in range(batch_size):
              global_idx = i * batch_size + j
-             save_image(img.detach().cpu(), xt_dir / f"step_{t_label:04d}_sample_{global_idx:05d}.png")
-        
+             save_image(xt[j].detach().cpu(), xt_dir / f"step_{t_label:04d}_sample_{global_idx:05d}.png", normalize=True)
+
         for j, img in enumerate(dataset.postprocess(x0)):
              global_idx = i * batch_size + j
              save_image(img.detach().cpu(), x0_dir / f"step_{t_label:04d}_sample_{global_idx:05d}.png")
@@ -375,11 +378,20 @@ def main(argv: Optional[List[str]] = None) -> None:
             or cfg.metrics.baseline_path is not None  # Need intermediates for comparison
         )
         
+        sampling_method = cfg.sampling.get("method", "ddim")
+        sampler_kwargs = {
+            key: cfg.sampling[key]
+            for key in ("sigma_min", "sigma_max", "rho", "s_churn", "s_min", "s_max", "s_noise")
+            if key in cfg.sampling
+        }
+        LOGGER.info("Sampling method: %s", sampling_method)
         result: SamplingOutput = model.sample(
             num_samples=cfg.sampling.num_samples,
             batch_size=cfg.sampling.batch_size,
             generator=generator,
             return_intermediates=return_intermediates,
+            method=sampling_method,
+            sampler_kwargs=sampler_kwargs,
         )
         end_time = time.perf_counter()
 

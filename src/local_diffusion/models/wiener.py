@@ -6,7 +6,7 @@ import torch
 
 from local_diffusion.data import DatasetBundle
 from local_diffusion.models.base import BaseDenoiser
-from local_diffusion.utils import compute_wiener_filter, load_wiener_filter, save_wiener_filter
+from local_diffusion.utils import default_wiener_path, resolve_wiener_components
 from local_diffusion.models import register_model
 
 
@@ -34,60 +34,40 @@ class DenoisingWiener(BaseDenoiser):
             **kwargs,
         )
         
-        self.wiener_path = params.get("wiener_path", None)
-        
-        # If path not provided, default to data/models/wiener/<dataset>_<resolution>
-        if self.wiener_path is None:
-            default_root = Path("data/models/wiener")
-            self.wiener_path = default_root / f"{dataset.name}_{dataset.resolution}"
-        else:
-            self.wiener_path = Path(self.wiener_path)
+        # Allow precomputed PCA download (when available) to skip covariance + SVD.
+        self.use_precomputed_pca = bool(params.get("use_precomputed_pca", True))
+
+        wiener_path = params.get("wiener_path", None)
+        self.wiener_path = Path(wiener_path) if wiener_path else default_wiener_path(dataset)
 
     def train(self, dataset: DatasetBundle):  # type: ignore[override]
-        """Load or compute Wiener filter matrices."""
-        
-        try:
-            # Try to load existing Wiener filter SVD
-            U, LA, Vh, mean = load_wiener_filter(self.wiener_path, device=self.device)
-        except FileNotFoundError:
-            # Compute and save new Wiener filter
-            LOGGER.info("Wiener filter not found. Computing from dataset...")
-            S, mean = compute_wiener_filter(
-                dataloader=dataset.dataloader,
-                device=self.device,
-                resolution=self.resolution,
-                n_channels=self.n_channels,
-            )
-            
-            # Perform SVD decomposition
-            U, LA, Vh = torch.linalg.svd(S)
-            
-            save_wiener_filter(U, LA, Vh, mean, self.wiener_path)
-            LOGGER.info("Computed and saved Wiener filter to %s", self.wiener_path)
-        
+        """Load, download (precomputed PCA), or compute Wiener filter matrices."""
+
+        U, LA, Vh, mean = resolve_wiener_components(
+            self.wiener_path,
+            dataset,
+            device=self.device,
+            n_channels=self.n_channels,
+            use_precomputed_pca=self.use_precomputed_pca,
+        )
+
         self.register_buffer("U", U)
         self.register_buffer("LA", LA)
         self.register_buffer("Vh", Vh)
         self.register_buffer("mean", mean.to(self.device))
         return self
 
-    def _get_Lt_Ht(self, timestep: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _shrink_factors(self, timestep: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Per-PCA-direction Wiener shrinkage and sqrt(alpha_bar) for a timestep."""
         if not all(hasattr(self, attr) for attr in ["U", "LA", "Vh", "mean"]):
             raise RuntimeError(
                 "Model not trained. Call model.train(dataset) before sampling."
             )
-        
-        alpha_prod_t = self.scheduler.alphas_cumprod[timestep]
+        alpha_prod_t = self.scheduler.alphas_cumprod[timestep].to(self.LA.device)
         beta_prod_t = 1 - alpha_prod_t
-
-        shrink_factors = alpha_prod_t * self.LA / (beta_prod_t + alpha_prod_t * self.LA)
-        LAshrink = torch.diag(shrink_factors)  # [n, n]
-        LLt = self.U @ LAshrink @ self.Vh  # [n, n]
-
-        I = torch.eye(LLt.shape[0], device=LLt.device)
-        Ht = I - LLt
-        Lt = LLt.clone() / torch.sqrt(alpha_prod_t)
-        return Lt, Ht
+        # s_k = alpha_bar * lambda_k / (beta_bar + alpha_bar * lambda_k)  in [0, 1]
+        shrink = alpha_prod_t * self.LA / (beta_prod_t + alpha_prod_t * self.LA)
+        return shrink, alpha_prod_t.sqrt()
 
     @torch.no_grad()
     def denoise(
@@ -97,26 +77,19 @@ class DenoisingWiener(BaseDenoiser):
         *,
         generator: Optional[torch.Generator] = None,
         **kwargs: Any,
-    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
+    ) -> torch.Tensor:
         del generator, kwargs
-        
-        if self.mean is None:
-            raise RuntimeError(
-                "Model not trained. Call model.train(dataset) before sampling."
-            )
 
         timestep_index = int(timestep.item()) if isinstance(timestep, torch.Tensor) else int(timestep)
-        Lt, Ht = self._get_Lt_Ht(timestep_index)
+        shrink, sqrt_alpha = self._shrink_factors(timestep_index)
 
-        # Flatten latents to [batch, n_pixels]
-        latents_flat = latents.flatten(start_dim=1)  # [batch, n_pixels]
-        
-        # Apply Wiener filter: Lt @ x_t + Ht @ mean
-        lx0_flat = (Lt @ latents_flat.T).T  # [n_pixels, n_pixels] @ [n_pixels, batch] -> [n_pixels, batch] -> [batch, n_pixels]
-        mean_term_flat = (Ht @ self.mean.unsqueeze(-1)).squeeze(-1)  # [n_pixels, n_pixels] @ [n_pixels, 1] -> [n_pixels]
-        
-        # Combine and reshape back to image dimensions
-        total_x0_flat = lx0_flat + mean_term_flat.unsqueeze(0)  # [batch, n_pixels]
-        total_x0 = total_x0_flat.view_as(latents)
+        # The Wiener estimate is  x0 = mean + U diag(s) U^T (x_t / sqrt(alpha_bar) - mean).
+        # Apply it directly in the PCA basis (project -> shrink -> reconstruct) instead of
+        # materializing the [n, n] filter: this is O(n * k) per step with no n x n matrix.
+        x = latents.flatten(start_dim=1)                 # [batch, n]
+        residual = x / sqrt_alpha - self.mean.unsqueeze(0)  # [batch, n]
+        coeff = residual @ self.U                          # [batch, k]  project onto eigenvectors
+        coeff = coeff * shrink.unsqueeze(0)                # shrink each direction
+        pred_x0 = self.mean.unsqueeze(0) + coeff @ self.Vh  # [batch, n]  reconstruct (Vh = U^T)
 
-        return total_x0
+        return pred_x0.view_as(latents)

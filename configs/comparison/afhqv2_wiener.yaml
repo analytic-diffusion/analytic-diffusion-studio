@@ -1,0 +1,13 @@
+defaults:
+  - /defaults.yaml
+  - /comparison/_base_afhqv2.yaml
+
+# Gaussian / Wiener analytical denoiser (precomputed PCA)
+experiment:
+  run_name: cmp_afhqv2_wiener
+  tags: [comparison, afhqv2, wiener, heun]
+
+model:
+  name: wiener
+  params:
+    use_precomputed_pca: true

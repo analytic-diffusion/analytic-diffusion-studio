@@ -1,0 +1,20 @@
+defaults:
+  - /defaults.yaml
+
+experiment:
+  run_name: optimal_afhqv2
+  tags: [baseline, optimal, afhqv2]
+
+dataset:
+  name: afhqv2
+  split: train
+  download: true
+  batch_size: 256
+  subset_size: null
+  resolution: 64
+
+model:
+  name: optimal
+  params:
+    temperature: 1.0
+    num_neighbors: 200

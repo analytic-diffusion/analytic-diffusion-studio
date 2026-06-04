@@ -1,0 +1,18 @@
+defaults:
+  - /defaults.yaml
+
+experiment:
+  run_name: nearest_dataset_afhqv2
+  tags: [baseline, nearest, afhqv2]
+
+dataset:
+  name: afhqv2
+  split: train
+  download: true
+  batch_size: 256
+  subset_size: null
+  resolution: 64
+
+model:
+  name: nearest_dataset
+  params: {}

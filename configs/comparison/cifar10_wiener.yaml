@@ -1,0 +1,13 @@
+defaults:
+  - /defaults.yaml
+  - /comparison/_base_cifar10.yaml
+
+# Gaussian / Wiener analytical denoiser (precomputed PCA)
+experiment:
+  run_name: cmp_cifar10_wiener
+  tags: [comparison, cifar10, wiener, heun]
+
+model:
+  name: wiener
+  params:
+    use_precomputed_pca: true

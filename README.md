@@ -29,7 +29,8 @@
     <a href="https://lukoianov.com">Artem Lukoianov</a>, &nbsp;
     <a href="https://chenyang.co">Chenyang Yuan</a>, &nbsp;
     <a href="https://cscarv.github.io/">Christopher Scarvelis</a>, &nbsp;
-    <a href="https://scholar.google.com/citations?user=H-yl_JMAAAAJ&hl=en">Mason Kamb</a>
+    <a href="https://scholar.google.com/citations?user=H-yl_JMAAAAJ&hl=en">Mason Kamb</a>, &nbsp;
+    <a href="https://animadversio.github.io/">Binxu Wang</a>
 </p>
 
 <p align="center">
@@ -52,8 +53,9 @@ If you encounter any bugs, inconsistent behavior, or have suggestions how to imp
 | `pca_locality` | Analytical denoiser capturing locality from data statistics | [![arXiv](https://img.shields.io/badge/arXiv-2509.09672-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2509.09672) |
 | `optimal` | Bayes-optimal estimator | — |
 | `scfdm` | Smoothed Bayes-optimal estimator | [![arXiv](https://img.shields.io/badge/arXiv-2310.12395-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2310.12395) |
-| `wiener` | Wiener filter denoiser | — |
+| `wiener` | Wiener filter denoiser | [![arXiv](https://img.shields.io/badge/arXiv-2412.09726-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2412.09726) |
 | `nearest_dataset` | Nearest neighbor retrieval baseline | — |
+| `edm_unet` | Pretrained EDM UNet (Karras et al.) — learned baseline | [![arXiv](https://img.shields.io/badge/arXiv-2206.00364-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2206.00364) |
 
 
 ## Supported Datasets
@@ -62,9 +64,16 @@ If you encounter any bugs, inconsistent behavior, or have suggestions how to imp
 |---------|-----------|---------------|-------|
 | MNIST | `mnist` | Yes | |
 | Fashion-MNIST | `fashion_mnist` | Yes | |
-| CIFAR-10 | `cifar10` | Yes | |
+| CIFAR-10 | `cifar10` | Yes | Precomputed PCA available (32×32) |
 | CelebA-HQ | `celeba_hq` | No | Download manually and place in `data/datasets/` |
 | AFHQv2 | `afhq` | No | Download manually and place in `data/datasets/` |
+| AFHQv2 (64×64) | `afhqv2` | Yes | From HuggingFace; precomputed PCA available |
+| FFHQ (64×64) | `ffhq` | Yes | From HuggingFace; precomputed PCA available |
+| ImageNet (64×64) | `imagenet` | Yes | From HuggingFace (~16 GB); precomputed PCA available |
+
+The `ffhq`, `imagenet` and `afhqv2` datasets, along with their precomputed PCAs, are
+hosted at [`binxu/image_datasets_PCAs`](https://huggingface.co/datasets/binxu/image_datasets_PCAs)
+and downloaded automatically on first use (`download: true`).
 
 
 ## Environment Setup
@@ -100,6 +109,84 @@ You can skip this step, but then the metrics wont be available -- make sure to d
 uv run download_baseline_weights.py
 ```
 
+### Precomputed PCA / Wiener filters
+
+The `wiener` and `pca_locality` models are built from the dataset covariance and its
+eigendecomposition (PCA). Computing this from scratch is expensive at higher resolutions
+— at 64×64×3 the covariance matrix is 12288×12288 (~600 MB) — so precomputed PCAs are
+published at [`binxu/image_datasets_PCAs`](https://huggingface.co/datasets/binxu/image_datasets_PCAs).
+
+When you run either model, it resolves its filter in this order:
+
+1. Load cached SVD components from `data/models/wiener/<dataset>_<resolution>/`.
+2. Otherwise, if a precomputed PCA exists for that dataset + resolution, download and
+   convert it (this is the default — the published PCAs cover `cifar10` @ 32 and
+   `afhqv2` / `ffhq` / `imagenet` @ 64).
+3. Otherwise, compute the covariance from the dataloader and SVD it.
+
+The conversion rescales the published PCA (computed in `[0, 1]`) into the framework's
+`[-1, 1]` pixel range. To force a local recompute instead of downloading, set
+`model.params.use_precomputed_pca=false`. You can also fetch one directly:
+
+```python
+from local_diffusion.utils import download_precomputed_pca
+download_precomputed_pca("ffhq", 64, "data/models/wiener/ffhq_64")
+```
+
+### EDM pretrained UNets (`edm_unet`)
+
+The `edm_unet` model wraps NVLabs' pretrained [EDM](https://github.com/NVlabs/edm)
+networks (Karras et al. 2022) as a learned denoiser, so you can compare the analytical
+methods against a strong trained diffusion model on the same images.
+
+By default it downloads the official VP checkpoint from the NVIDIA EDM CDN based on the
+dataset name (`cifar10`, `ffhq`, `afhqv2`):
+
+```bash
+uv run generate.py --config configs/edm_unet/cifar10.yaml
+```
+
+**No `edm`/`dnnlib` install required.** A minimal EDM subset is vendored under
+`src/local_diffusion/external/edm/` (its own NVIDIA CC BY-NC-SA 4.0 license is kept in
+that directory), which is enough to unpickle the official checkpoints directly. The model
+bridges the repo's DDIM schedule to EDM's σ parameterization
+(`σ = sqrt((1−ᾱ)/ᾱ)`, `x_edm = x_t/sqrt(ᾱ)`), so the EDM net plugs straight into the
+sampling loop.
+
+Checkpoint source can be overridden via `model.params`:
+- `checkpoint_path` — a local `.pkl` (official) or `.pt` (converted);
+- `checkpoint_url` — a direct URL to an official `.pkl`;
+- `hf_repo` + `hf_filename` — a converted `.pt` re-hosted on HuggingFace.
+
+To produce a dependency-light, version-robust checkpoint (a plain
+`{init_kwargs, state_dict}` that loads without the EDM pickle layer), convert once:
+
+```bash
+uv run convert_edm_checkpoint.py \
+    https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl \
+    data/models/edm/edm-cifar10-32x32-uncond-vp.pt
+```
+
+### Samplers (DDIM and EDM Heun)
+
+`sampling.method` selects the integrator:
+
+- `ddim` (default) — first-order DDIM over the DDPM schedule.
+- `heun` — the EDM (Karras et al. 2022) deterministic 2nd-order Heun sampler on the
+  ρ-spaced σ schedule (≈`2·num_steps − 1` denoiser calls). Optional stochastic churn is
+  available via `s_churn` / `s_min` / `s_max` / `s_noise` (Algorithm 2).
+
+```bash
+uv run generate.py --config configs/edm_unet/cifar10.yaml sampling.method=heun
+```
+
+The Heun sampler is σ-native: each model exposes a `denoise_sigma(x, σ)` denoiser.
+`edm_unet` uses the network's exact `D(x, σ)`; the analytical models fall back to the
+default VP bridge (σ → nearest DDPM timestep). The `edm_unet` configs default to `heun`,
+and our implementation reproduces NVLabs' reference `edm_sampler` to float precision. The
+relevant Heun knobs (defaults in parentheses): `sigma_min` (0.002), `sigma_max` (80),
+`rho` (7), `s_churn` (0).
+
 ## Running Experiments
 
 ### Single Experiment
@@ -125,13 +212,58 @@ Run all baseline-dataset combinations using the provided script:
 
 This script iterates over:
 - **Baselines**: `pca_locality`, `optimal`, `wiener`, `nearest_dataset`
-- **Datasets**: `afhq`, `celeba_hq`, `cifar10`, `fashion_mnist`, `mnist`
+- **Datasets**: `afhq`, `celeba_hq`, `cifar10`, `fashion_mnist`, `mnist`, `ffhq`, `afhqv2` (and `imagenet`, commented out by default due to its size)
 
 It automatically skips missing config files and runs each experiment sequentially.
+
+### Denoiser comparison (EDM vs Wiener vs empirical)
+
+`configs/comparison/` pits three denoisers against each other under an **identical** setup
+(same dataset, seed, and EDM Heun sampler) so their generations are directly comparable —
+the seeded sampler draws the same initial latents for all three:
+
+| Config | Denoiser | Role |
+|--------|----------|------|
+| `<dataset>_edm_unet.yaml` | `edm_unet` | pretrained EDM UNet (learned reference) |
+| `<dataset>_wiener.yaml` | `wiener` | Gaussian / Wiener analytical denoiser (precomputed PCA) |
+| `<dataset>_optimal.yaml` | `optimal` | softmax empirical Bayes score (subset-indexed) |
+
+Datasets: `afhqv2`, `ffhq` (both from HuggingFace), and `cifar10`. Run all three for a
+dataset with:
+
+```bash
+./run_comparison.sh afhqv2
+# or, for a quick CPU check on cached CIFAR-10:
+./run_comparison.sh cifar10 experiment.device=cpu sampling.num_samples=4
+```
+
+Results land under `data/runs/comparison_<dataset>/`, and `run_comparison.sh` finishes by
+stitching the per-model grids into a labeled side-by-side `montage.png` there. You can
+rebuild that figure anytime:
+
+```bash
+uv run make_comparison_montage.py afhqv2     # -> data/runs/comparison_afhqv2/montage.png
+```
+
+The empirical/`optimal` denoiser is capped with `subset_size` for tractable runtime. Note
+that only `edm_unet` evaluates at the exact σ; `wiener`/`optimal` use the default VP bridge
+(σ → nearest DDPM timestep), whose representable σ floor is ≈0.01 on the linear schedule,
+so the final couple of low-noise Heun steps for those models are approximate. (A
+continuous-σ `denoise_sigma` for the analytic models — both are closed-form in σ — would
+remove this; it's a planned follow-up.)
 
 ### Notebook
 
 For quick experimentation, you can use the Jupyter notebook: `playground.ipynb`
+
+### Tests
+
+Hermetic unit tests (no network/downloads) cover the precomputed-PCA conversion and the
+EDM-format zip dataset loader:
+
+```bash
+uv run --extra test pytest
+```
 
 
 ## Configuration Files
@@ -310,7 +442,7 @@ If you find this framework useful, please cite it:
 ```bibtex
 @misc{analytic-diffusion-studio,
     title={Analytic Diffusion Studio: A Unified Framework for Training-Free Diffusion Models},
-    author={Kamb, Mason and Lukoianov, Artem and Scarvelis, Christopher and Yuan, Chenyang},
+    author={Kamb, Mason and Lukoianov, Artem and Scarvelis, Christopher and Yuan, Chenyang and Wang, Binxu},
     year={2025},
     url={https://github.com/analytic-diffusion/analytic-diffusion-studio},
 }

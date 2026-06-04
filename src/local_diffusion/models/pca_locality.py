@@ -12,11 +12,7 @@ from tqdm import tqdm
 from local_diffusion.data import DatasetBundle
 from local_diffusion.models import register_model
 from local_diffusion.models.base import BaseDenoiser
-from local_diffusion.utils.wiener import (
-    load_wiener_filter,
-    compute_wiener_filter,
-    save_wiener_filter,
-)
+from local_diffusion.utils import default_wiener_path, resolve_wiener_components
 
 LOGGER = logging.getLogger(__name__)
 
@@ -100,36 +96,24 @@ class PCALocalityDenoiser(BaseDenoiser):
         self.mask_threshold = float(params.get("mask_threshold", 0.02))
         self.eps = 1e-6
 
-        # Share Wiener path logic with the Wiener model
+        # Allow precomputed PCA download (when available) to skip covariance + SVD.
+        self.use_precomputed_pca = bool(params.get("use_precomputed_pca", True))
+
+        # Share the Wiener cache path with the Wiener model.
         wiener_path = params.get("wiener_path", None)
-        if wiener_path is None:
-            default_root = Path("data/models/wiener")
-            self.wiener_path = default_root / f"{dataset.name}_{dataset.resolution}"
-        else:
-            self.wiener_path = Path(wiener_path)
+        self.wiener_path = Path(wiener_path) if wiener_path else default_wiener_path(dataset)
 
         self.dataset: Optional[DatasetBundle] = None
 
     def train(self, dataset: DatasetBundle):  # type: ignore[override]
-        """Load or compute Wiener SVD and keep dataset reference for streaming."""
-        try:
-            U, LA, Vh, mean = load_wiener_filter(
-                self.wiener_path, device=self.device
-            )
-        except FileNotFoundError:
-            LOGGER.info(
-                "Wiener filter not found at %s. Computing from dataset...",
-                self.wiener_path,
-            )
-            S, mean = compute_wiener_filter(
-                dataloader=dataset.dataloader,
-                device=self.device,
-                resolution=self.resolution,
-                n_channels=self.n_channels,
-            )
-            U, LA, Vh = torch.linalg.svd(S)
-            save_wiener_filter(U, LA, Vh, mean, self.wiener_path)
-            LOGGER.info("Computed and saved Wiener filter to %s", self.wiener_path)
+        """Load, download (precomputed PCA), or compute Wiener SVD; keep dataset ref."""
+        U, LA, Vh, mean = resolve_wiener_components(
+            self.wiener_path,
+            dataset,
+            device=self.device,
+            n_channels=self.n_channels,
+            use_precomputed_pca=self.use_precomputed_pca,
+        )
 
         # Keep buffers on the target device to avoid per-call transfers
         self.register_buffer("U", U.to(self.device))
